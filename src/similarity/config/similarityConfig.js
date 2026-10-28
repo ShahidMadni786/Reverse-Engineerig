@@ -22,3 +22,4 @@ export const similarityConfig = {
   defaultExcludeBibliography: true,
   defaultExcludeSmallMatches: true,
 };
+

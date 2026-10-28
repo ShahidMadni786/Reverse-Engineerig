@@ -240,43 +240,57 @@ export class SimilarityHttpServer {
     }
 
     if (pathname === "/api/submissions" && method === "POST") {
-      const body = await this.readJsonBody(req);
-
-      let textContent = body.text ?? "";
-      let fileName = body.fileName ?? "submission.txt";
-      let fileType = "txt";
-
-      if (body.fileBase64) {
-        const buffer = Buffer.from(body.fileBase64, "base64");
-        const processed = extractDocument(fileName, buffer);
-        textContent = processed.rawText;
-        fileType = processed.fileType;
-      }
-
-      if (!textContent || textContent.trim().length === 0) {
-        this.sendJson(res, 400, { error: "Submission text content cannot be empty" });
-        return;
-      }
-
-      const title = body.title?.trim() || fileName;
-      const author = body.author?.trim() || req.user?.full_name || "Unknown Author";
-      const userId = req.user?.id || "guest-user";
-      const fileHash = createHash("sha256").update(textContent).digest("hex");
-
-      const submission = SubmissionRepository.createSubmission(
-        userId,
-        title,
-        author,
-        fileName,
-        "local://submissions/" + fileName,
-        fileHash,
-        fileType,
-        textContent,
-        body.settings ?? {},
-      );
-
-      SubmissionRepository.updateStatus(submission.id, "processing");
       try {
+        const body = await this.readJsonBody(req);
+
+        let textContent = body.text ?? "";
+        let fileName = body.fileName ?? "submission.txt";
+        let fileType = "txt";
+
+        if (body.fileBase64) {
+          try {
+            const buffer = Buffer.from(body.fileBase64, "base64");
+            const processed = extractDocument(fileName, buffer);
+            textContent = processed.rawText;
+            fileType = processed.fileType;
+          } catch (extractErr) {
+            const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
+            this.sendJson(res, 400, { error: `Document processing error: ${msg}` });
+            return;
+          }
+        }
+
+        if (!textContent || textContent.trim().length === 0) {
+          this.sendJson(res, 400, { error: "Submission text content cannot be empty" });
+          return;
+        }
+
+        const title = body.title?.trim() || fileName;
+        const author = body.author?.trim() || req.user?.full_name || "Unknown Author";
+
+        // Resolve valid user ID in database
+        let userId = req.user?.id;
+        if (!userId) {
+          const guest = UserRepository.findById("guest-user") || UserRepository.findByUsername("admin") || UserRepository.listUsers()[0];
+          userId = guest ? guest.id : "guest-user";
+        }
+
+        const fileHash = createHash("sha256").update(textContent).digest("hex");
+
+        const submission = SubmissionRepository.createSubmission(
+          userId,
+          title,
+          author,
+          fileName,
+          "local://submissions/" + fileName,
+          fileHash,
+          fileType,
+          textContent,
+          body.settings ?? {},
+        );
+
+        SubmissionRepository.updateStatus(submission.id, "processing");
+
         const analysis = SimilarityEngine.analyze(textContent, body.settings);
         const report = ReportRepository.saveReport(submission.id, analysis);
         SubmissionRepository.updateStatus(submission.id, "completed");
@@ -288,7 +302,6 @@ export class SimilarityHttpServer {
         });
       } catch (err) {
         const errStr = err instanceof Error ? err.message : String(err);
-        SubmissionRepository.updateStatus(submission.id, "failed", errStr);
         this.sendJson(res, 500, { error: "Analysis failed", details: errStr });
       }
       return;

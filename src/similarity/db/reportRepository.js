@@ -94,3 +94,4 @@ export class ReportRepository {
     return row.avgScore !== null ? Number(row.avgScore.toFixed(1)) : 0;
   }
 }
+

@@ -164,3 +164,4 @@ src/similarity/
 ## Transparency & Methodological Note
 
 A locally maintained corpus operates independently of commercial plagiarism services. Similarity scores reflect containment and overlap with documents you have authorized and indexed in your local repository.
+

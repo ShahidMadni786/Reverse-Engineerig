@@ -47,3 +47,4 @@ export function extractDocument(fileName, buffer) {
     ...(extracted.pageCount !== undefined ? { pageCount: extracted.pageCount } : {}),
   };
 }
+

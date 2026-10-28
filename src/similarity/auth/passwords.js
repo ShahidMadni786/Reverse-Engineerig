@@ -28,3 +28,4 @@ export function verifyPassword(password, hash, salt) {
 export function generateToken() {
   return randomBytes(32).toString("hex");
 }
+

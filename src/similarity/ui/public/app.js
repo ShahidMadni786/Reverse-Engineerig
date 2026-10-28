@@ -250,15 +250,20 @@ class AcademicSimilarityApp {
         },
       };
 
+      const headers = { "Content-Type": "application/json" };
+      if (this.token) {
+        headers["Authorization"] = `Bearer ${this.token}`;
+      }
+
       const res = await fetch("/api/submissions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Submission failed");
+        throw new Error(data.details || data.error || data.message || "Submission failed");
       }
 
       // Reset form
@@ -654,3 +659,4 @@ class AcademicSimilarityApp {
 const app = new AcademicSimilarityApp();
 window.app = app;
 document.addEventListener("DOMContentLoaded", () => app.init());
+

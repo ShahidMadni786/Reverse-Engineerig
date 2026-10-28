@@ -130,16 +130,27 @@ export class UserRepository {
 
   static ensureDefaultUsers() {
     const db = getDatabase();
-    const countRow = db.prepare("SELECT COUNT(*) as count FROM users").get();
-    if (countRow && countRow.count > 0) {
-      return;
+
+    // 1. Ensure guest user always exists with fixed id 'guest-user' for unauthenticated/demo submissions
+    const guest = this.findById("guest-user");
+    if (!guest) {
+      const { hash, salt } = hashPassword("guest123");
+      db.prepare(`
+        INSERT OR IGNORE INTO users (id, username, email, password_hash, salt, role, full_name, created_at)
+        VALUES ('guest-user', 'guest', 'guest@academic.local', ?, ?, 'student', 'Guest User', ?)
+      `).run(hash, salt, new Date().toISOString());
     }
 
-    // Seed default admin
-    this.createUser("admin", "admin@academic.local", "admin123", "admin", "System Administrator");
-    // Seed default instructor
-    this.createUser("professor", "professor@academic.local", "prof123", "instructor", "Prof. Eleanor Vance");
-    // Seed default student
-    this.createUser("student", "student@academic.local", "student123", "student", "Alex Mercer");
+    // 2. Ensure default admin, professor, and student exist
+    if (!this.findByUsername("admin")) {
+      this.createUser("admin", "admin@academic.local", "admin123", "admin", "System Administrator");
+    }
+    if (!this.findByUsername("professor")) {
+      this.createUser("professor", "professor@academic.local", "prof123", "instructor", "Prof. Eleanor Vance");
+    }
+    if (!this.findByUsername("student")) {
+      this.createUser("student", "student@academic.local", "student123", "student", "Alex Mercer");
+    }
   }
 }
+
