@@ -12,6 +12,8 @@ const SOURCE_COLORS = [
 export function exportHtmlReport(submission, report) {
   const matches = JSON.parse(report.matchesJson);
   const sources = JSON.parse(report.sourcesJson);
+  const metrics = JSON.parse(report.metricsJson || "{}");
+  const comparisonAvailable = metrics.comparisonAvailable !== false;
 
   const sourceColorMap = new Map();
   sources.forEach((s, idx) => {
@@ -83,13 +85,13 @@ export function exportHtmlReport(submission, report) {
       text-align: center;
       padding: 1rem 1.75rem;
       border-radius: 12px;
-      background: ${report.overallScore > 30 ? "#ef444420" : report.overallScore > 15 ? "#f59e0b20" : "#10b98120"};
-      border: 2px solid ${report.overallScore > 30 ? "#ef4444" : report.overallScore > 15 ? "#f59e0b" : "#10b981"};
+      background: ${comparisonAvailable ? (report.overallScore > 30 ? "#ef444420" : report.overallScore > 15 ? "#f59e0b20" : "#10b98120") : "#64748b20"};
+      border: 2px solid ${comparisonAvailable ? (report.overallScore > 30 ? "#ef4444" : report.overallScore > 15 ? "#f59e0b" : "#10b981") : "#64748b"};
     }
     .score-num {
       font-size: 2.75rem;
       font-weight: 800;
-      color: ${report.overallScore > 30 ? "#ef4444" : report.overallScore > 15 ? "#f59e0b" : "#10b981"};
+      color: ${comparisonAvailable ? (report.overallScore > 30 ? "#ef4444" : report.overallScore > 15 ? "#f59e0b" : "#10b981") : "#64748b"};
     }
     .score-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
     .section-title { font-size: 1.25rem; margin: 1.5rem 0 1rem; font-weight: 600; }
@@ -150,8 +152,8 @@ export function exportHtmlReport(submission, report) {
         <p><strong>Word Count:</strong> ${submission.wordCount} words &bull; <strong>Format:</strong> .${submission.fileType.toUpperCase()}</p>
       </div>
       <div class="score-badge">
-        <div class="score-num">${report.overallScore}%</div>
-        <div class="score-label">Similarity Index</div>
+        <div class="score-num">${comparisonAvailable ? report.overallScore + "%" : "Not compared"}</div>
+        <div class="score-label">${comparisonAvailable ? "Similarity Index" : "Reference corpus required"}</div>
       </div>
     </div>
 

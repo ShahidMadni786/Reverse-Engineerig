@@ -29,8 +29,10 @@
         <button class="nav-tab" data-tab="users">Users & RBAC</button>
       </nav>
       <div class="user-profile">
-        <span class="role-badge" id="current-user-role">Admin</span>
-        <span class="user-name" id="current-user-name">System Administrator</span>
+        <span class="role-badge" id="current-user-role">User</span>
+        <span class="user-name" id="current-user-name">Signed out</span>
+        <button class="btn btn-secondary btn-sm theme-toggle" id="theme-toggle" type="button" onclick="app.toggleTheme()" aria-label="Switch to light theme" title="Switch theme">☀️ Light</button>
+        <button class="btn btn-secondary btn-sm" id="logout-button" type="button" onclick="app.handleLogout()" hidden>Sign out</button>
       </div>
     </div>
   </header>
@@ -41,7 +43,7 @@
     <section id="tab-dashboard" class="tab-panel active">
       <div class="hero-bar">
         <h2>Local Integrity Dashboard</h2>
-        <p>Independent multi-method similarity detection and local corpus management without external subscriptions.</p>
+        <p>Exact phrase overlap against your local corpus. A score is not a plagiarism or authorship verdict.</p>
       </div>
 
       <div class="stats-grid">
@@ -63,7 +65,7 @@
         <div class="stat-card">
           <div class="stat-title">Avg Similarity Score</div>
           <div class="stat-value" id="stat-avg-similarity">0.0%</div>
-          <div class="stat-meta">Across all reports</div>
+          <div class="stat-meta" id="stat-average-hint">Across analyzed reports</div>
         </div>
       </div>
 
@@ -101,6 +103,7 @@
           <h2>Submit Document for Similarity Analysis</h2>
           <p>Extract, segment, and compare text against your local authorized corpus.</p>
         </div>
+        <div id="corpus-readiness" class="notice" role="status" aria-live="polite"></div>
         <form id="submission-form" onsubmit="app.handleSubmission(event)">
           <div class="form-row">
             <div class="form-group flex-1">
@@ -149,7 +152,7 @@
             </div>
             <div class="threshold-row">
               <label for="sub-threshold">Minimum Match Length:</label>
-              <input type="number" id="sub-threshold" value="8" min="3" max="30" style="width: 80px;"> words
+              <input type="number" id="sub-threshold" value="5" min="3" max="30" style="width: 80px;"> words
             </div>
           </div>
 
@@ -256,6 +259,35 @@
       </div>
     </section>
   </main>
+
+  <!-- Sign-in Modal -->
+  <div id="login-modal" class="modal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Sign in to Academic Integrity Engine</h2>
+        </div>
+        <form id="login-form" onsubmit="app.handleLogin(event)">
+          <div class="modal-body">
+            <p class="text-muted">Use your administrator, instructor, or student account.</p>
+            <div class="form-group">
+              <label for="login-username">Username</label>
+              <input id="login-username" name="username" type="text" autocomplete="username" required>
+            </div>
+            <div class="form-group">
+              <label for="login-password">Password</label>
+              <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+            <p id="login-error" class="login-error" role="alert"></p>
+            <p class="text-muted">On first launch, the one-time administrator password is printed in the server terminal. Set <code>SIMILARITY_ADMIN_PASSWORD</code> before first launch to choose one.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary" id="login-submit">Sign in</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- Interactive Report Viewer Modal -->
   <div id="report-modal" class="modal">

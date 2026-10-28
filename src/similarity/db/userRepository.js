@@ -130,26 +130,40 @@ export class UserRepository {
 
   static ensureDefaultUsers() {
     const db = getDatabase();
+    const configuredAdminPassword = process.env["SIMILARITY_ADMIN_PASSWORD"];
+    const issuedCredentials = [];
 
-    // 1. Ensure guest user always exists with fixed id 'guest-user' for unauthenticated/demo submissions
-    const guest = this.findById("guest-user");
-    if (!guest) {
-      const { hash, salt } = hashPassword("guest123");
-      db.prepare(`
-        INSERT OR IGNORE INTO users (id, username, email, password_hash, salt, role, full_name, created_at)
-        VALUES ('guest-user', 'guest', 'guest@academic.local', ?, ?, 'student', 'Guest User', ?)
-      `).run(hash, salt, new Date().toISOString());
+    let admin = this.findByUsername("admin");
+    if (!admin) {
+      const password = configuredAdminPassword || generateToken();
+      this.createUser(
+        "admin",
+        "admin@academic.local",
+        password,
+        "admin",
+        "System Administrator",
+      );
+      if (!configuredAdminPassword) issuedCredentials.push(`admin: ${password}`);
+    } else if (verifyPassword("admin123", admin.password_hash, admin.salt)) {
+      const password = configuredAdminPassword || generateToken();
+      const { hash, salt } = hashPassword(password);
+      db.prepare("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?").run(hash, salt, admin.id);
+      issuedCredentials.push(`admin (rotated from the published demo password): ${password}`);
     }
 
-    // 2. Ensure default admin, professor, and student exist
-    if (!this.findByUsername("admin")) {
-      this.createUser("admin", "admin@academic.local", "admin123", "admin", "System Administrator");
+    for (const [username, demoPassword] of [["professor", "prof123"], ["student", "student123"]]) {
+      const user = this.findByUsername(username);
+      if (!user || !verifyPassword(demoPassword, user.password_hash, user.salt)) continue;
+      const password = generateToken();
+      const { hash, salt } = hashPassword(password);
+      db.prepare("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?").run(hash, salt, user.id);
+      issuedCredentials.push(`${username} (rotated from the published demo password): ${password}`);
     }
-    if (!this.findByUsername("professor")) {
-      this.createUser("professor", "professor@academic.local", "prof123", "instructor", "Prof. Eleanor Vance");
-    }
-    if (!this.findByUsername("student")) {
-      this.createUser("student", "student@academic.local", "student123", "student", "Alex Mercer");
+
+    if (issuedCredentials.length > 0) {
+      console.warn(
+        `Academic Integrity Engine one-time account credentials:\n${issuedCredentials.join("\n")}\\nSet SIMILARITY_ADMIN_PASSWORD before first launch to choose the initial admin password.`,
+      );
     }
   }
 }
