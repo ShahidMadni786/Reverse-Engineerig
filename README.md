@@ -32,6 +32,13 @@
 > Follow the installation and release links from these official sources. A similar
 > repository name or copied README does not establish that a download is official.
 
+> [!NOTE]
+> **Local Academic Similarity Platform**: A full-stack, local-first academic document similarity and integrity platform is integrated within this repository. To launch the local web application, run:
+> ```bash
+> npm run similarity:start
+> ```
+> For complete documentation, architecture details, and CLI usage, see [ACADEMIC_SIMILARITY_GUIDE.md](ACADEMIC_SIMILARITY_GUIDE.md).
+
 <div align="center">
 
 <br />

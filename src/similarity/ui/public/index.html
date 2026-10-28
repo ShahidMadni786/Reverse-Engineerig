@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Academic Similarity Platform</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- Header & Navigation -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Academic Integrity Engine</h1>
+          <span class="badge local-badge">Local-First &bull; Offline Mode</span>
+        </div>
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+        <button class="nav-tab" data-tab="submit">New Submission</button>
+        <button class="nav-tab" data-tab="submissions">Submissions</button>
+        <button class="nav-tab" data-tab="corpus">Corpus Manager</button>
+        <button class="nav-tab" data-tab="users">Users & RBAC</button>
+      </nav>
+      <div class="user-profile">
+        <span class="role-badge" id="current-user-role">Admin</span>
+        <span class="user-name" id="current-user-name">System Administrator</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content">
+    <!-- 1. DASHBOARD TAB -->
+    <section id="tab-dashboard" class="tab-panel active">
+      <div class="hero-bar">
+        <h2>Local Integrity Dashboard</h2>
+        <p>Independent multi-method similarity detection and local corpus management without external subscriptions.</p>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-title">Local Corpus Documents</div>
+          <div class="stat-value" id="stat-corpus-docs">0</div>
+          <div class="stat-meta" id="stat-corpus-words">0 indexed words</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Indexed Shingles</div>
+          <div class="stat-value" id="stat-indexed-shingles">0</div>
+          <div class="stat-meta">Inverted Hash Index</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Submissions Analyzed</div>
+          <div class="stat-value" id="stat-submissions">0</div>
+          <div class="stat-meta" id="stat-completed-subs">0 completed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">Avg Similarity Score</div>
+          <div class="stat-value" id="stat-avg-similarity">0.0%</div>
+          <div class="stat-meta">Across all reports</div>
+        </div>
+      </div>
+
+      <div class="card recent-card">
+        <div class="card-header">
+          <h3>Recent Submissions</h3>
+          <button class="btn btn-primary btn-sm" onclick="app.switchTab('submit')">+ New Submission</button>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Format</th>
+                <th>Words</th>
+                <th>Status</th>
+                <th>Similarity Index</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="recent-submissions-tbody">
+              <tr><td colspan="8" class="text-center">Loading submissions...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. NEW SUBMISSION TAB -->
+    <section id="tab-submit" class="tab-panel">
+      <div class="card form-card">
+        <div class="card-header">
+          <h2>Submit Document for Similarity Analysis</h2>
+          <p>Extract, segment, and compare text against your local authorized corpus.</p>
+        </div>
+        <form id="submission-form" onsubmit="app.handleSubmission(event)">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="sub-title">Document Title *</label>
+              <input type="text" id="sub-title" required placeholder="e.g. Distributed Consensus in Cloud Systems">
+            </div>
+            <div class="form-group flex-1">
+              <label for="sub-author">Author / Student Name</label>
+              <input type="text" id="sub-author" placeholder="e.g. John Doe">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Upload Document (.pdf, .docx, .txt)</label>
+            <div class="drop-zone" id="sub-dropzone" onclick="document.getElementById('sub-file-input').click()">
+              <input type="file" id="sub-file-input" accept=".txt,.docx,.pdf,.md" style="display:none;" onchange="app.handleFileSelect(event, 'sub')">
+              <div class="drop-zone-prompt">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                </svg>
+                <p id="sub-file-label">Click or drag & drop a file here (.PDF, .DOCX, or .TXT)</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="sub-direct-text">Or Paste Document Text Directly</label>
+            <textarea id="sub-direct-text" rows="6" placeholder="Paste essay, thesis, or paper content here..."></textarea>
+          </div>
+
+          <div class="options-box">
+            <h4>Analysis Exclusions & Thresholds</h4>
+            <div class="checkbox-grid">
+              <label class="checkbox-label">
+                <input type="checkbox" id="sub-exclude-bib" checked>
+                <span><strong>Exclude Bibliography & References</strong> (detects academic bibliography headings)</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="sub-exclude-quotes">
+                <span><strong>Exclude Quoted Text</strong> (detects quoted passages and blockquotes)</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="sub-exclude-small" checked>
+                <span><strong>Exclude Small Matches</strong> (ignore phrases under minimum word threshold)</span>
+              </label>
+            </div>
+            <div class="threshold-row">
+              <label for="sub-threshold">Minimum Match Length:</label>
+              <input type="number" id="sub-threshold" value="8" min="3" max="30" style="width: 80px;"> words
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="sub-submit-btn" class="btn btn-primary btn-lg">
+              <span class="btn-text">Run Similarity Analysis</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- 3. SUBMISSIONS TAB -->
+    <section id="tab-submissions" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <h2>All Submissions History</h2>
+          <button class="btn btn-primary btn-sm" onclick="app.switchTab('submit')">+ New Submission</button>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Format</th>
+                <th>Words</th>
+                <th>Status</th>
+                <th>Similarity Index</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="all-submissions-tbody">
+              <tr><td colspan="8" class="text-center">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. CORPUS MANAGER TAB -->
+    <section id="tab-corpus" class="tab-panel">
+      <div class="hero-bar">
+        <h2>Local Document Corpus</h2>
+        <p>Authorized reference papers, student archives, and institutional repositories for offline comparison.</p>
+      </div>
+
+      <div class="corpus-actions-bar">
+        <button class="btn btn-primary" onclick="app.openCorpusModal()">+ Add Document to Corpus</button>
+        <button class="btn btn-secondary" onclick="app.rebuildCorpusIndex()">Rebuild Inverted Index</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Corpus Documents</h3>
+          <span class="badge" id="corpus-count-badge">0 documents</span>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Source Type</th>
+                <th>Format</th>
+                <th>Word Count</th>
+                <th>Added Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="corpus-tbody">
+              <tr><td colspan="7" class="text-center">No documents in corpus yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. USERS & RBAC TAB -->
+    <section id="tab-users" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <h2>User Management & Access Control</h2>
+          <button class="btn btn-primary btn-sm" onclick="app.openUserModal()">+ Add User</button>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Full Name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Created At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="6" class="text-center">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Interactive Report Viewer Modal -->
+  <div id="report-modal" class="modal">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h2 id="rep-title">Similarity Report</h2>
+            <p id="rep-meta" class="text-muted"></p>
+          </div>
+          <div class="rep-header-actions">
+            <button class="btn btn-sm btn-secondary" onclick="app.exportReport('html')">Export HTML</button>
+            <button class="btn btn-sm btn-secondary" onclick="app.exportReport('json')">Export JSON</button>
+            <button class="btn-close" onclick="app.closeReportModal()">&times;</button>
+          </div>
+        </div>
+        <div class="modal-body report-layout">
+          <!-- Left: Document Text with Highlighting -->
+          <div class="report-document-panel">
+            <div class="panel-header">
+              <h3>Submission Content</h3>
+              <span class="badge" id="rep-word-count">0 words</span>
+            </div>
+            <div class="doc-text-container" id="rep-doc-text">
+              <!-- Dynamically populated with marks -->
+            </div>
+          </div>
+
+          <!-- Right: Sources & Controls -->
+          <div class="report-sidebar-panel">
+            <!-- Overall Score Badge -->
+            <div class="score-card" id="rep-score-card">
+              <div class="score-percent" id="rep-overall-score">0%</div>
+              <div class="score-label">Overall Similarity Index</div>
+              <div class="score-subtext" id="rep-score-subtext"></div>
+            </div>
+
+            <!-- Dynamic Recalculation Controls -->
+            <div class="recalc-box">
+              <h4>Exclusion Filters</h4>
+              <label class="checkbox-label">
+                <input type="checkbox" id="rep-filter-bib" onchange="app.recalculateReport()">
+                <span>Exclude Bibliography</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="rep-filter-quotes" onchange="app.recalculateReport()">
+                <span>Exclude Quotes</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="rep-filter-small" onchange="app.recalculateReport()">
+                <span>Exclude Small Matches</span>
+              </label>
+            </div>
+
+            <!-- Matched Sources List -->
+            <div class="sources-list-box">
+              <h4>Matched Sources (<span id="rep-sources-count">0</span>)</h4>
+              <div id="rep-sources-list" class="sources-items">
+                <!-- Sources rendered here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Document to Corpus Modal -->
+  <div id="corpus-modal" class="modal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Add Document to Local Corpus</h3>
+          <button class="btn-close" onclick="app.closeCorpusModal()">&times;</button>
+        </div>
+        <form onsubmit="app.handleCorpusUpload(event)">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="corpus-title">Title *</label>
+              <input type="text" id="corpus-title" required placeholder="Document or Paper Title">
+            </div>
+            <div class="form-group">
+              <label for="corpus-author">Author(s)</label>
+              <input type="text" id="corpus-author" placeholder="Author name(s)">
+            </div>
+            <div class="form-group">
+              <label for="corpus-source-type">Source Category</label>
+              <select id="corpus-source-type">
+                <option value="academic">Academic Paper</option>
+                <option value="institutional">Institutional Archive</option>
+                <option value="student_archive">Prior Student Submission</option>
+                <option value="reference">Reference Material</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Select File (.pdf, .docx, .txt)</label>
+              <input type="file" id="corpus-file-input" accept=".txt,.docx,.pdf,.md" onchange="app.handleFileSelect(event, 'corpus')">
+            </div>
+            <div class="form-group">
+              <label for="corpus-text">Or Paste Text</label>
+              <textarea id="corpus-text" rows="5" placeholder="Document body text..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="app.closeCorpusModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="corpus-submit-btn">Index into Corpus</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div id="user-modal" class="modal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Create User Account</h3>
+          <button class="btn-close" onclick="app.closeUserModal()">&times;</button>
+        </div>
+        <form onsubmit="app.handleUserCreate(event)">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="usr-username">Username *</label>
+              <input type="text" id="usr-username" required placeholder="e.g. jsmith">
+            </div>
+            <div class="form-group">
+              <label for="usr-fullname">Full Name *</label>
+              <input type="text" id="usr-fullname" required placeholder="e.g. Jane Smith">
+            </div>
+            <div class="form-group">
+              <label for="usr-email">Email *</label>
+              <input type="email" id="usr-email" required placeholder="jsmith@university.edu">
+            </div>
+            <div class="form-group">
+              <label for="usr-password">Password *</label>
+              <input type="password" id="usr-password" required placeholder="Minimum 6 characters">
+            </div>
+            <div class="form-group">
+              <label for="usr-role">Role</label>
+              <select id="usr-role">
+                <option value="student">Student (Submit & view own)</option>
+                <option value="instructor">Instructor (Corpus, analyze, reports)</option>
+                <option value="admin">Administrator (Full privileges)</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="app.closeUserModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create User</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

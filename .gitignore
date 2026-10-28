@@ -6,6 +6,12 @@ __pycache__/
 # Distribution
 dist/
 build/
+# Local Academic Similarity Platform runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+
 node_modules
 *.egg-info/
 *.egg

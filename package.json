@@ -108,6 +108,9 @@
     "npm-shrinkwrap.json"
   ],
   "scripts": {
+    "similarity:start": "node src/similarity/cli.mjs start",
+    "similarity:test": "node src/similarity/tests/similarityPlatform.test.mjs",
+    "similarity:cli": "node src/similarity/cli.mjs",
     "release:notes": "node scripts/release-notes.mjs",
     "deps:check": "node scripts/check-dependency-install.mjs",
     "metadata:generate": "node scripts/run-exclusive.mjs artifacts node scripts/generate-package-metadata.mjs",
