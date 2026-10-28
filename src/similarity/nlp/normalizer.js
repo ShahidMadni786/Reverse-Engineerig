@@ -8,19 +8,18 @@ export function normalizeText(text) {
 }
 
 export function tokenizeWithOffsets(text) {
-  const normalizedDoc = text.normalize("NFKC");
   const tokens = [];
-  const wordRegex = /[\p{L}\p{N}]+/gu;
+  const wordRegex = /[\p{L}\p{M}\p{N}]+/gu;
   let match;
   let index = 0;
 
-  while ((match = wordRegex.exec(normalizedDoc)) !== null) {
+  while ((match = wordRegex.exec(text)) !== null) {
     const rawWord = match[0];
     const start = match.index;
     const end = start + rawWord.length;
     tokens.push({
       text: rawWord,
-      normalized: rawWord.toLowerCase(),
+      normalized: rawWord.normalize("NFKC").toLowerCase(),
       start,
       end,
       index: index++,

@@ -16,7 +16,7 @@ export const similarityConfig = {
   sessionSecret: process.env["SIMILARITY_SECRET"] ?? "local-similarity-academic-key-2026",
   defaultShingleSize: 5,
   minExactMatchWords: 6,
-  smallMatchWordThreshold: 8,
+  smallMatchWordThreshold: 5,
   defaultSimilarityThreshold: 0.10,
   defaultExcludeQuotes: false,
   defaultExcludeBibliography: true,

@@ -30,13 +30,15 @@ export class SimilarityHttpServer {
   start(port = similarityConfig.port, host = similarityConfig.host) {
     return new Promise((resolvePromise, reject) => {
       UserRepository.ensureDefaultUsers();
+      CorpusRepository.ensureIndexVersion();
 
       const server = createServer(async (req, res) => {
         try {
           await this.handleRequest(req, res);
         } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          this.sendJson(res, 500, { error: "Internal Server Error", message: errorMsg });
+          const status = Number.isInteger(err?.statusCode) ? err.statusCode : 500;
+          const message = status < 500 ? err.message : "Internal Server Error";
+          this.sendJson(res, status, { error: message });
         }
       });
 
@@ -67,16 +69,6 @@ export class SimilarityHttpServer {
   }
 
   async handleRequest(req, res) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
     const parsed = new URL(req.url ?? "/", "http://localhost");
     const pathname = parsed.pathname;
     const query = Object.fromEntries(parsed.searchParams.entries());
@@ -91,6 +83,10 @@ export class SimilarityHttpServer {
     }
 
     if (pathname.startsWith("/api/")) {
+      if (pathname !== "/api/auth/login" && !req.user) {
+        this.sendJson(res, 401, { error: "Sign in is required" });
+        return;
+      }
       await this.handleApiRoute(pathname, req, res, query);
       return;
     }
@@ -100,6 +96,30 @@ export class SimilarityHttpServer {
 
   async handleApiRoute(pathname, req, res, query) {
     const method = req.method ?? "GET";
+    const role = req.user?.role;
+    const isAdmin = role === "admin";
+    const canManageCorpus = isAdmin || role === "instructor";
+
+    if (pathname.startsWith("/api/users") && !isAdmin) {
+      this.sendJson(res, 403, { error: "Administrator access is required" });
+      return;
+    }
+    if (pathname.startsWith("/api/corpus") && !canManageCorpus) {
+      this.sendJson(res, 403, { error: "Instructor access is required" });
+      return;
+    }
+    if (
+      pathname.startsWith("/api/reports/") &&
+      !isAdmin &&
+      role !== "instructor"
+    ) {
+      const submissionId = pathname.split("/")[3];
+      const submission = SubmissionRepository.getSubmissionById(submissionId);
+      if (!submission || submission.userId !== req.user?.id) {
+        this.sendJson(res, 403, { error: "You cannot access this report" });
+        return;
+      }
+    }
 
     if (pathname === "/api/auth/login" && method === "POST") {
       const body = await this.readJsonBody(req);
@@ -269,11 +289,7 @@ export class SimilarityHttpServer {
         const author = body.author?.trim() || req.user?.full_name || "Unknown Author";
 
         // Resolve valid user ID in database
-        let userId = req.user?.id;
-        if (!userId) {
-          const guest = UserRepository.findById("guest-user") || UserRepository.findByUsername("admin") || UserRepository.listUsers()[0];
-          userId = guest ? guest.id : "guest-user";
-        }
+        const userId = req.user.id;
 
         const fileHash = createHash("sha256").update(textContent).digest("hex");
 
@@ -301,8 +317,10 @@ export class SimilarityHttpServer {
           analysis,
         });
       } catch (err) {
-        const errStr = err instanceof Error ? err.message : String(err);
-        this.sendJson(res, 500, { error: "Analysis failed", details: errStr });
+        const status = Number.isInteger(err?.statusCode) ? err.statusCode : 500;
+        this.sendJson(res, status, {
+          error: status < 500 ? err.message : "Analysis failed",
+        });
       }
       return;
     }
@@ -314,6 +332,10 @@ export class SimilarityHttpServer {
         this.sendJson(res, 404, { error: "Submission not found" });
         return;
       }
+      if (req.user?.role === "student" && sub.userId !== req.user.id) {
+        this.sendJson(res, 403, { error: "You cannot access this submission" });
+        return;
+      }
       const report = ReportRepository.getReportBySubmissionId(id);
       this.sendJson(res, 200, { submission: sub, report });
       return;
@@ -321,6 +343,11 @@ export class SimilarityHttpServer {
 
     if (pathname.startsWith("/api/submissions/") && method === "DELETE") {
       const id = pathname.substring("/api/submissions/".length);
+      const existing = SubmissionRepository.getSubmissionById(id);
+      if (req.user?.role === "student" && existing?.userId !== req.user.id) {
+        this.sendJson(res, 403, { error: "You cannot delete this submission" });
+        return;
+      }
       const deleted = SubmissionRepository.deleteSubmission(id);
       if (!deleted) {
         this.sendJson(res, 404, { error: "Submission not found" });
@@ -456,12 +483,27 @@ export class SimilarityHttpServer {
   }
 
   readJsonBody(req) {
+    const maxBytes = 12 * 1024 * 1024;
     return new Promise((resolvePromise, reject) => {
-      let data = "";
+      const chunks = [];
+      let receivedBytes = 0;
+      let tooLarge = false;
       req.on("data", (chunk) => {
-        data += chunk;
+        receivedBytes += chunk.length;
+        if (receivedBytes > maxBytes) {
+          tooLarge = true;
+          return;
+        }
+        if (!tooLarge) chunks.push(chunk);
       });
       req.on("end", () => {
+        if (tooLarge) {
+          const error = new Error("Request body exceeds the 12 MB limit");
+          error.statusCode = 413;
+          reject(error);
+          return;
+        }
+        const data = Buffer.concat(chunks).toString("utf8");
         if (!data.trim()) {
           resolvePromise({});
           return;
@@ -469,7 +511,9 @@ export class SimilarityHttpServer {
         try {
           resolvePromise(JSON.parse(data));
         } catch {
-          reject(new Error("Invalid JSON body"));
+          const error = new Error("Invalid JSON body");
+          error.statusCode = 400;
+          reject(error);
         }
       });
       req.on("error", (err) => reject(err));

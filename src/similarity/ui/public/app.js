@@ -12,24 +12,129 @@ const SOURCE_COLORS = [
 class AcademicSimilarityApp {
   constructor() {
     this.token = localStorage.getItem("sim_token") || null;
-    this.currentUser = {
-      id: "admin",
-      username: "admin",
-      role: "admin",
-      full_name: "System Administrator",
-    };
+    this.currentUser = null;
     this.currentReport = null;
     this.currentSubmission = null;
     this.selectedFiles = {
       sub: null,
       corpus: null,
     };
+    this.theme = localStorage.getItem("similarity_theme") || "dark";
+    document.documentElement.dataset.theme = this.theme;
   }
 
   async init() {
     this.setupTabs();
     this.setupDragAndDrop();
+    this.updateThemeButton();
+    if (!(await this.restoreSession())) {
+      this.showLogin();
+      return;
+    }
     await this.refreshAll();
+  }
+
+  async restoreSession() {
+    if (!this.token) return false;
+    try {
+      const response = await window.fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!response.ok) throw new Error("Session expired");
+      const data = await response.json();
+      this.setCurrentUser(data.user);
+      return true;
+    } catch {
+      this.token = null;
+      localStorage.removeItem("sim_token");
+      return false;
+    }
+  }
+
+  async apiFetch(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
+    const response = await window.fetch(url, { ...options, headers });
+    if (response.status === 401) {
+      this.token = null;
+      localStorage.removeItem("sim_token");
+      this.showLogin();
+      throw new Error("Your session expired. Sign in again.");
+    }
+    return response;
+  }
+
+  showLogin() {
+    document.getElementById("login-modal").classList.add("open");
+    document.getElementById("login-username").focus();
+  }
+
+  setCurrentUser(user) {
+    this.currentUser = user;
+    document.getElementById("current-user-role").textContent = user.role;
+    document.getElementById("current-user-name").textContent = user.full_name;
+    document.getElementById("logout-button").hidden = false;
+    const usersTab = document.querySelector('[data-tab="users"]');
+    if (usersTab) usersTab.hidden = user.role !== "admin";
+    const corpusTab = document.querySelector('[data-tab="corpus"]');
+    if (corpusTab) corpusTab.hidden = user.role === "student";
+  }
+
+  async handleLogin(event) {
+    event.preventDefault();
+    const error = document.getElementById("login-error");
+    const button = document.getElementById("login-submit");
+    error.textContent = "";
+    button.disabled = true;
+    try {
+      const response = await window.fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: document.getElementById("login-username").value,
+          password: document.getElementById("login-password").value,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Sign-in failed");
+      this.token = data.token;
+      localStorage.setItem("sim_token", this.token);
+      this.setCurrentUser(data.user);
+      document.getElementById("login-modal").classList.remove("open");
+      document.getElementById("login-form").reset();
+      await this.refreshAll();
+    } catch (err) {
+      error.textContent = err.message;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async handleLogout() {
+    try {
+      await this.apiFetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Clear the local session even if the server is unreachable.
+    }
+    this.token = null;
+    this.currentUser = null;
+    localStorage.removeItem("sim_token");
+    this.showLogin();
+  }
+
+  toggleTheme() {
+    this.theme = this.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = this.theme;
+    localStorage.setItem("similarity_theme", this.theme);
+    this.updateThemeButton();
+  }
+
+  updateThemeButton() {
+    const button = document.getElementById("theme-toggle");
+    if (!button) return;
+    const next = this.theme === "dark" ? "light" : "dark";
+    button.textContent = next === "light" ? "☀️ Light" : "🌙 Dark";
+    button.setAttribute("aria-label", `Switch to ${next} theme`);
   }
 
   setupTabs() {
@@ -123,15 +228,26 @@ class AcademicSimilarityApp {
 
   async loadStats() {
     try {
-      const res = await fetch("/api/system/stats");
+      const res = await this.apiFetch("/api/system/stats");
       const data = await res.json();
       document.getElementById("stat-corpus-docs").textContent = data.corpus.totalDocs;
       document.getElementById("stat-corpus-words").textContent = `${data.corpus.totalWords.toLocaleString()} indexed words`;
       document.getElementById("stat-indexed-shingles").textContent = data.corpus.indexedShingles.toLocaleString();
       document.getElementById("stat-submissions").textContent = data.submissions.totalSubmissions;
       document.getElementById("stat-completed-subs").textContent = `${data.submissions.completedCount} completed`;
-      document.getElementById("stat-avg-similarity").textContent = `${data.averageSimilarity}%`;
+      const corpusReady = data.corpus.totalDocs > 0;
+      document.getElementById("stat-avg-similarity").textContent = corpusReady ? `${data.averageSimilarity}%` : "—";
+      document.getElementById("stat-average-hint").textContent = corpusReady
+        ? "Across analyzed reports"
+        : "Add reference documents to compare";
       document.getElementById("corpus-count-badge").textContent = `${data.corpus.totalDocs} documents`;
+      const readiness = document.getElementById("corpus-readiness");
+      if (readiness) {
+        readiness.classList.toggle("notice-warning", !corpusReady);
+        readiness.textContent = corpusReady
+          ? `Comparison ready: ${data.corpus.totalDocs} local reference document${data.corpus.totalDocs === 1 ? "" : "s"} indexed. Results only cover this corpus.`
+          : "No reference documents are indexed yet. Add documents in Corpus Manager before running a meaningful similarity comparison; otherwise no score is available.";
+      }
     } catch (err) {
       console.error("Failed to load stats:", err);
     }
@@ -139,7 +255,7 @@ class AcademicSimilarityApp {
 
   async loadSubmissions() {
     try {
-      const res = await fetch("/api/submissions");
+      const res = await this.apiFetch("/api/submissions");
       const data = await res.json();
       const subs = data.submissions || [];
       this.renderSubmissionsTable("recent-submissions-tbody", subs.slice(0, 5));
@@ -188,14 +304,19 @@ class AcademicSimilarityApp {
     // Load reports for each submission to show similarity pills
     subs.forEach(async (sub) => {
       try {
-        const rRes = await fetch(`/api/submissions/${sub.id}`);
+        const rRes = await this.apiFetch(`/api/submissions/${sub.id}`);
         const rData = await rRes.json();
         const scoreCell = document.getElementById(`score-cell-${sub.id}`);
         if (scoreCell) {
           if (rData.report) {
             const score = rData.report.overallScore;
-            const level = score > 30 ? "high" : score > 15 ? "medium" : "low";
-            scoreCell.innerHTML = `<span class="score-pill ${level}">${score}%</span>`;
+            const metrics = JSON.parse(rData.report.metricsJson || "{}");
+            if (metrics.comparisonAvailable === false) {
+              scoreCell.innerHTML = `<span class="score-pill unavailable" title="Add reference documents to the local corpus">—</span>`;
+            } else {
+              const level = score > 30 ? "high" : score > 15 ? "medium" : "low";
+              scoreCell.innerHTML = `<span class="score-pill ${level}">${score}%</span>`;
+            }
           } else {
             scoreCell.innerHTML = `<span class="text-muted">—</span>`;
           }
@@ -219,7 +340,7 @@ class AcademicSimilarityApp {
       const excludeBib = document.getElementById("sub-exclude-bib").checked;
       const excludeQuotes = document.getElementById("sub-exclude-quotes").checked;
       const excludeSmall = document.getElementById("sub-exclude-small").checked;
-      const threshold = parseInt(document.getElementById("sub-threshold").value, 10) || 8;
+      const threshold = parseInt(document.getElementById("sub-threshold").value, 10) || 5;
 
       let fileBase64 = null;
       let fileName = "submission.txt";
@@ -255,7 +376,7 @@ class AcademicSimilarityApp {
         headers["Authorization"] = `Bearer ${this.token}`;
       }
 
-      const res = await fetch("/api/submissions", {
+      const res = await this.apiFetch("/api/submissions", {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
@@ -284,7 +405,7 @@ class AcademicSimilarityApp {
 
   async viewReport(submissionId) {
     try {
-      const res = await fetch(`/api/submissions/${submissionId}`);
+      const res = await this.apiFetch(`/api/submissions/${submissionId}`);
       const data = await res.json();
       if (!data.submission || !data.report) {
         alert("Report is not ready yet or analysis failed.");
@@ -300,10 +421,16 @@ class AcademicSimilarityApp {
 
       // Set score badge
       const score = data.report.overallScore;
+      const metrics = JSON.parse(data.report.metricsJson || "{}");
+      const comparisonAvailable = metrics.comparisonAvailable !== false;
       const scoreCard = document.getElementById("rep-score-card");
-      scoreCard.className = `score-card ${score > 30 ? "high" : score > 15 ? "medium" : "low"}`;
-      document.getElementById("rep-overall-score").textContent = `${score}%`;
-      document.getElementById("rep-score-subtext").textContent = `${data.report.matchedWordsCount} of ${data.report.totalWordsCount} words matched across corpus`;
+      scoreCard.className = comparisonAvailable
+        ? `score-card ${score > 30 ? "high" : score > 15 ? "medium" : "low"}`
+        : "score-card unavailable";
+      document.getElementById("rep-overall-score").textContent = comparisonAvailable ? `${score}%` : "—";
+      document.getElementById("rep-score-subtext").textContent = comparisonAvailable
+        ? `${data.report.matchedWordsCount} of ${data.report.totalWordsCount} words matched across corpus`
+        : "No reference corpus was indexed when this report ran. Add references and re-run.";
 
       // Set exclusion checkboxes from report
       const exclusions = JSON.parse(data.report.exclusionsUsedJson);
@@ -401,7 +528,7 @@ class AcademicSimilarityApp {
     const excludeSmall = document.getElementById("rep-filter-small").checked;
 
     try {
-      const res = await fetch(`/api/reports/${this.currentSubmission.id}/recalculate`, {
+      const res = await this.apiFetch(`/api/reports/${this.currentSubmission.id}/recalculate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -409,7 +536,7 @@ class AcademicSimilarityApp {
             excludeBibliography: excludeBib,
             excludeQuotes: excludeQuotes,
             excludeSmallMatches: excludeSmall,
-            smallMatchThreshold: 8,
+            smallMatchThreshold: 5,
           },
         }),
       });
@@ -418,10 +545,16 @@ class AcademicSimilarityApp {
       this.currentReport = data.report;
 
       const score = data.report.overallScore;
+      const metrics = JSON.parse(data.report.metricsJson || "{}");
+      const comparisonAvailable = metrics.comparisonAvailable !== false;
       const scoreCard = document.getElementById("rep-score-card");
-      scoreCard.className = `score-card ${score > 30 ? "high" : score > 15 ? "medium" : "low"}`;
-      document.getElementById("rep-overall-score").textContent = `${score}%`;
-      document.getElementById("rep-score-subtext").textContent = `${data.report.matchedWordsCount} of ${data.report.totalWordsCount} words matched across corpus`;
+      scoreCard.className = comparisonAvailable
+        ? `score-card ${score > 30 ? "high" : score > 15 ? "medium" : "low"}`
+        : "score-card unavailable";
+      document.getElementById("rep-overall-score").textContent = comparisonAvailable ? `${score}%` : "—";
+      document.getElementById("rep-score-subtext").textContent = comparisonAvailable
+        ? `${data.report.matchedWordsCount} of ${data.report.totalWordsCount} words matched across corpus`
+        : "No reference corpus was indexed when this report ran. Add references and re-run.";
 
       this.renderReportContent(this.currentSubmission, data.report);
     } catch (err) {
@@ -433,15 +566,26 @@ class AcademicSimilarityApp {
     document.getElementById("report-modal").classList.remove("open");
   }
 
-  exportReport(type) {
+  async exportReport(type) {
     if (!this.currentSubmission) return;
-    window.location.href = `/api/reports/${this.currentSubmission.id}/export/${type}`;
+    try {
+      const response = await this.apiFetch(`/api/reports/${this.currentSubmission.id}/export/${type}`);
+      if (!response.ok) throw new Error("Report export failed");
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `similarity-report-${this.currentSubmission.id}.${type === "html" ? "html" : "json"}`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch (err) {
+      alert("Failed to export report: " + err.message);
+    }
   }
 
   async deleteSubmission(id) {
     if (!confirm("Are you sure you want to delete this submission and its report?")) return;
     try {
-      await fetch(`/api/submissions/${id}`, { method: "DELETE" });
+      await this.apiFetch(`/api/submissions/${id}`, { method: "DELETE" });
       await this.refreshAll();
     } catch (err) {
       alert("Failed to delete submission: " + err.message);
@@ -451,7 +595,7 @@ class AcademicSimilarityApp {
   // Corpus Methods
   async loadCorpus() {
     try {
-      const res = await fetch("/api/corpus");
+      const res = await this.apiFetch("/api/corpus");
       const data = await res.json();
       const docs = data.documents || [];
       const tbody = document.getElementById("corpus-tbody");
@@ -468,7 +612,7 @@ class AcademicSimilarityApp {
           return `<tr>
             <td><strong>${this.escape(doc.title)}</strong></td>
             <td>${this.escape(doc.author || "—")}</td>
-            <td><span class="badge" style="background:#334155; text-transform:capitalize;">${doc.sourceType}</span></td>
+            <td><span class="badge" style="background:#334155; text-transform:capitalize;">${this.escape(doc.sourceType)}</span></td>
             <td><span class="badge" style="background:#1e293b; border:1px solid #475569;">.${doc.fileType.toUpperCase()}</span></td>
             <td>${doc.wordCount.toLocaleString()}</td>
             <td>${dateStr}</td>
@@ -518,7 +662,7 @@ class AcademicSimilarityApp {
         return;
       }
 
-      const res = await fetch("/api/corpus", {
+      const res = await this.apiFetch("/api/corpus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -555,7 +699,7 @@ class AcademicSimilarityApp {
   async deleteCorpusDoc(id) {
     if (!confirm("Are you sure you want to remove this document from the local corpus?")) return;
     try {
-      await fetch(`/api/corpus/${id}`, { method: "DELETE" });
+      await this.apiFetch(`/api/corpus/${id}`, { method: "DELETE" });
       await this.refreshAll();
     } catch (err) {
       alert("Failed to delete document: " + err.message);
@@ -565,7 +709,7 @@ class AcademicSimilarityApp {
   async rebuildCorpusIndex() {
     if (!confirm("Rebuild the inverted index for all corpus documents?")) return;
     try {
-      const res = await fetch("/api/corpus/reindex", { method: "POST" });
+      const res = await this.apiFetch("/api/corpus/reindex", { method: "POST" });
       const data = await res.json();
       alert(data.message || "Index rebuilt!");
       await this.refreshAll();
@@ -577,7 +721,7 @@ class AcademicSimilarityApp {
   // Users & RBAC Methods
   async loadUsers() {
     try {
-      const res = await fetch("/api/users");
+      const res = await this.apiFetch("/api/users");
       const data = await res.json();
       const users = data.users || [];
       const tbody = document.getElementById("users-tbody");
@@ -619,7 +763,7 @@ class AcademicSimilarityApp {
       const password = document.getElementById("usr-password").value;
       const role = document.getElementById("usr-role").value;
 
-      const res = await fetch("/api/users", {
+      const res = await this.apiFetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, fullName, email, password, role }),
@@ -638,7 +782,7 @@ class AcademicSimilarityApp {
   async deleteUser(id) {
     if (!confirm("Are you sure you want to delete this user?")) return;
     try {
-      await fetch(`/api/users/${id}`, { method: "DELETE" });
+      await this.apiFetch(`/api/users/${id}`, { method: "DELETE" });
       await this.loadUsers();
     } catch (err) {
       alert("Failed to delete user: " + err.message);

@@ -17,14 +17,11 @@ An independent, local-first academic similarity platform that runs entirely on y
   - **Bibliography / Reference Section Detection**: Identifies academic reference headings (`References`, `Bibliography`, `Works Cited`) to exclude citations from false similarity inflations.
   - **Small Match Filtering**: Configurable word thresholds (e.g., 6–10 words) to eliminate trivial phrase coincidences.
 
-### 2. Multi-Method Similarity Engine
-- **Multi-Word Exact Matching**: Sliding-window alignment of exact overlapping phrases.
-- **N-Gram Shingling & Inverted Index**: Computes $w$-shingles with 32-bit FNV-1a integer hashing for sub-linear corpus lookup.
-- **Jaccard Similarity & Containment Metric**:
-  $$J(A, B) = \frac{|A \cap B|}{|A \cup B|}, \quad C(A, B) = \frac{|A \cap B|}{|A|}$$
-- **TF-IDF & Vector Space Cosine Similarity**:
-  $$\cos(\vec{u}, \vec{v}) = \frac{\sum u_i v_i}{\|\vec{u}\| \|\vec{v}\|}$$
-- **Non-Overlapping Union Aggregation**: Calculates true overall similarity percentage without double-counting intersecting matches.
+### 2. Similarity Engine
+- Exact phrase matching uses a sliding five-word shingle index and verifies candidate text before counting a match.
+- Jaccard and TF-IDF cosine values are reported as context; they do not detect paraphrases.
+- The score is the share of analyzable submission words in exact matched passages from the local corpus. It is not a finding of plagiarism or authorship.
+- A report with no indexed reference documents shows that no comparison was available instead of presenting an empty-corpus result as 0%.
 
 ### 3. Local Document Corpus & Incremental Indexing
 - Build your own institutional, research, or course comparison repository.
@@ -37,6 +34,10 @@ An independent, local-first academic similarity platform that runs entirely on y
 - **Source Breakdown**: Shows percentage contribution, matched word count, passage count, Jaccard score, and cosine similarity for each matched source.
 - **Dynamic Recalculation**: Toggle quotes and bibliography exclusions on the fly without re-uploading.
 - **Stand-Alone HTML & JSON Export**: One-click download of self-contained, printable HTML reports and JSON datasets.
+
+### AI authorship and writing assistance
+
+This tool does not determine whether a person or an AI wrote a document. Similarity results measure text overlap with the local reference corpus only. Do not use a similarity percentage as an AI-authorship score or as a misconduct verdict. The app does not rewrite work to disguise AI authorship or evade academic checks.
 
 ### 5. Local Database & RBAC Security
 - **SQLite Engine**: Zero external database server needed; uses Node.js built-in `node:sqlite`.
@@ -65,10 +66,7 @@ node src/similarity/cli.mjs start --port 8080
 ```
 Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
-**Default Accounts**:
-- Admin: `admin` / `admin123`
-- Instructor: `professor` / `prof123`
-- Student: `student` / `student123`
+On a new installation, the app creates an administrator account and prints a one-time password in the server terminal. Set `SIMILARITY_ADMIN_PASSWORD` before first launch to choose the initial password. Existing published demo passwords are rotated at startup; the new credentials are printed once. Create instructor and student accounts after signing in.
 
 ---
 

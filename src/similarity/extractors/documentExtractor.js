@@ -32,6 +32,12 @@ export function extractDocument(fileName, buffer) {
 
   const fileHash = createHash("sha256").update(buffer).digest("hex");
   const rawText = extracted.text;
+  if (!rawText || rawText.trim().length === 0) {
+    const hint = ext === "pdf"
+      ? "This PDF may be scanned or use an unsupported text encoding. Run OCR or export it as a searchable PDF, then try again."
+      : "Check that the document contains readable text.";
+    throw new CorruptDocumentError(`No readable text could be extracted from "${fileName}". ${hint}`);
+  }
   const wordCount = (rawText.match(/\S+/g) ?? []).length;
   const characterCount = rawText.length;
 

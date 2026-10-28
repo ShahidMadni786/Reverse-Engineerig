@@ -17,6 +17,7 @@ const command = args[0] || "help";
 
 async function main() {
   UserRepository.ensureDefaultUsers();
+  CorpusRepository.ensureIndexVersion();
 
   switch (command) {
     case "start":
@@ -30,7 +31,7 @@ async function main() {
       console.log(` Running locally at: http://localhost:${actualPort}`);
       console.log(` Database: ${similarityConfig.dbPath}`);
       console.log(` Offline Mode: Active (No external services required)`);
-      console.log(` Default Admin: admin / admin123`);
+      console.log(` Sign in with the administrator credentials created at first launch.`);
       console.log(`======================================================\n`);
       break;
     }

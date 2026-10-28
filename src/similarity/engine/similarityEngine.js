@@ -43,6 +43,7 @@ export class SimilarityEngine {
       return this.emptyResult(allTokens.length, quotes, bibliography, settings);
     }
 
+    const allCorpusDocs = CorpusRepository.listDocuments();
     const shingles = createShingles(allTokens, similarityConfig.defaultShingleSize);
 
     const validShingles = [];
@@ -75,12 +76,26 @@ export class SimilarityEngine {
     };
 
     const matchesByDoc = new Map();
+    const corpusTokenCache = new Map();
 
     for (const shingle of validShingles) {
       const hits = matchMap.get(shingle.hash);
       if (!hits) continue;
 
       for (const hit of hits) {
+        const doc = getCorpusDoc(hit.docId);
+        if (!doc) continue;
+        let sourceTokens = corpusTokenCache.get(hit.docId);
+        if (!sourceTokens) {
+          sourceTokens = tokenizeWithOffsets(doc.rawText);
+          corpusTokenCache.set(hit.docId, sourceTokens);
+        }
+        const sourceShingleText = sourceTokens
+          .slice(hit.position, hit.position + (shingle.tokenEndIndex - shingle.tokenStartIndex + 1))
+          .map((token) => token.normalized)
+          .join(" ");
+        if (sourceShingleText !== shingle.text) continue;
+
         let list = matchesByDoc.get(hit.docId);
         if (!list) {
           list = [];
@@ -147,7 +162,7 @@ export class SimilarityEngine {
         charEnd,
         text,
         tokenCount: p.tokenCount,
-        matchType: p.tokenCount >= 10 ? "exact" : "paraphrase",
+        matchType: "exact",
       });
     }
 
@@ -170,7 +185,6 @@ export class SimilarityEngine {
     const matchedWordsCount = unionedMatchedTokens.size;
     const overallScore = validWordsCount > 0 ? Number(((matchedWordsCount / validWordsCount) * 100).toFixed(1)) : 0;
 
-    const allCorpusDocs = CorpusRepository.listDocuments();
     const corpusTokensList = allCorpusDocs.map((d) => ({
       id: d.id,
       tokens: tokenizeWithOffsets(d.rawText),
@@ -241,6 +255,8 @@ export class SimilarityEngine {
       metrics: {
         topJaccard,
         topCosine,
+        corpusDocumentCount: allCorpusDocs.length,
+        comparisonAvailable: allCorpusDocs.length > 0,
       },
       summary,
     };
@@ -264,6 +280,8 @@ export class SimilarityEngine {
       metrics: {
         topJaccard: 0,
         topCosine: 0,
+        corpusDocumentCount: CorpusRepository.getCorpusStats().totalDocs,
+        comparisonAvailable: CorpusRepository.getCorpusStats().totalDocs > 0,
       },
       summary: "Document contains no analyzable text after applying exclusion filters.",
     };
@@ -279,7 +297,9 @@ export class SimilarityEngine {
   ) {
     const parts = [];
 
-    if (overallScore === 0) {
+    if (corpusCount === 0) {
+      parts.push("No similarity score is available because the local reference corpus is empty. Add authorized reference documents, then run the comparison again.");
+    } else if (overallScore === 0) {
       parts.push(
         `No significant similarity matches detected across the ${corpusCount} locally indexed reference documents.`,
       );

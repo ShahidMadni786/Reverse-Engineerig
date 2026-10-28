@@ -71,6 +71,25 @@ export class CorpusRepository {
     };
   }
 
+  static ensureIndexVersion() {
+    const db = getDatabase();
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS similarity_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+    const current = db.prepare("SELECT value FROM similarity_metadata WHERE key = ?").get("shingle_index_version");
+    if (current?.value === "2") return;
+
+    this.rebuildAllIndexes();
+    db.prepare(`
+      INSERT INTO similarity_metadata (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run("shingle_index_version", "2");
+  }
+
   static indexDocument(docId, text) {
     const db = getDatabase();
     const tokens = tokenizeWithOffsets(text);
